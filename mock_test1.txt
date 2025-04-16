@@ -1,5 +1,5 @@
 Task 1 - Create a cron job that appends the word Hello_World to the
-/var/lo/messages log file. Ensure that this job runs at 12 PM (noon) only on
+/var/log/messages log file. Ensure that this job runs at 12 PM (noon) only on
 weekdays.
 
 Task 2 - Find the user 'root' in the /etc/passwd file. Output this information to
