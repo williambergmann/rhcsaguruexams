@@ -179,7 +179,7 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 CURRENT_TASK=1; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Cron Job (Hello_World)${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
 CRON_CMD_1='echo "Hello_World" >> /var/log/messages'
-CRON_SCHED_1="0 12 \* \* 1-5"
+CRON_SCHED_1="0 12 * * 1-5"
 CRON_USER="root"
 if crontab -l -u $CRON_USER 2>/dev/null | grep -Fq "$CRON_SCHED_1 $CRON_CMD_1" || \
    grep -Frq "$CRON_SCHED_1 $CRON_USER $CRON_CMD_1" /etc/cron.d/ /etc/crontab; then
