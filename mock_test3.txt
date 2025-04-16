@@ -1,0 +1,50 @@
+Task 1 - Create a user named Max and a group named sysadmin. Grant the
+user and group sudo privileges so that they can run all commands as root
+without being prompted or a password. Additionally, set the account
+expiration or the user Max to December 21, 2025.
+
+Task 2 - Ensure that every new user account created automatically contains a
+file named Todo.txt in their home directory. Additionally, create a cron job for
+the user Max (create if it doesn't exist) that runs daily every 1 minute and
+executes the command Ex200 Testing with logger.
+
+Task 3 - Start the firewalld service to manage firewall rules. Then, configure
+the firewall to allow inbound HTTP trafic by adding the HTTP service.
+
+Task 4 - Create a bash script named symlink.sh in the /home directory that performs
+the following actions:
+* The script should create a symbolic link named jerry in the /home directory, which
+points to the /etc/passwd file.
+* If already exists, the script should output "Already existed".
+* If the symbolic link jerry is newly created, the script should output "Created".
+
+Task 5 - Create a Stratis pool usin 'nvme1n1' as the disk, and then extend the
+pool by adding 'nvme2n1' as an additional disk.
+
+Task 6 - Create a Container as a System Startup Service
+(a) Create a container named logserver using the rsyslog image, which is
+stored in the registry on Docker Hub account of rhcsaguru/rsyslog.
+(b) Configure the container to start automatically as a system service durin
+system startup.
+
+Task 7 - Confiure a local repository
+* Pull the Docker image rhcsaguru/local-repo from Docker Hub.
+* Run the image as a container, exposing it on port 80.
+* Configure a local YUM repository named local using http://localhost:80/.
+* Use the local repository to install the ngrep package.
+
+Task 8 - Create a custom network interace named dummy. Assign the
+following confiuration to the interace:
+Hostname: dev.example.com 
+IP Address: 192.168.1.42
+Netmask: 255.255.255.0 
+Gateway: 192.168.1.1 
+NameServer: 8.8.8.8
+
+Task 9 - Create a volume roup named guruvg and a logical volume named
+gurulv using a 5100 MB physical volume located at /dev/nvme1n1, and then
+mount it to /mymount.
+
+Task 10 - Extend the logical volume /dev/mapper/uruv-urulv to a total size
+of 8 GiB by adding the physical volume /dev/nvme2n1 to the existing volume
+group guruvg, and then resizing the logical volume accordingly.

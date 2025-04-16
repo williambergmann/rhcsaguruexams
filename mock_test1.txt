@@ -1,0 +1,39 @@
+Task 1 - Create a cron job that appends the word Hello_World to the
+/var/lo/messages log file. Ensure that this job runs at 12 PM (noon) only on
+weekdays.
+
+Task 2 - Find the user 'root' in the /etc/passwd file. Output this information to
+a file named users_entry in the /home directory. Aterwards, edit the file
+/home/users_entry to replace the user's shell from /bin/bash to /bin/sh.
+
+Task 3 - Confiure the system to limit the number of SSH login attempts to
+only 3. Also set that the password or all new users should expire ater 20
+days.
+
+Task 4 - Search or the Redis container image on the RHEL system and pull
+the image rom the Docker registry.
+
+Task 5 - Configure the SELinux boolean value 'container_manage_cgroup' to
+be enabled (set to 'on') and ensure that this setting is persistent across
+reboots.
+
+Task 6 - Add a new user 'expert' to the system with a UID of 1500. Set the
+user's home directory to /home/expertDir and the user's shell to /bin/sh. Also
+set the user's password to any string of your choice.
+
+Task 7 - Create a new group called panel, new user named 'dev' and add the
+new user dev to panel group as a secondary group. Ater this, set the default
+permissions for the user dev such that:
+* All newly created files by dev should have the permissions -r--------
+(read-only or the owner).
+* All newly created directories by dev should have the permissions
+-r-------- (read-only or the owner).
+
+Task 8 - Modiy the system's hostname to 'dev'
+
+Task 9 - Create a directory named 'example' in the /home directory. Change
+the ownership of the directory to the 'expert' user.
+
+Task 10 - Confiure the Apache HTTP Server to host a simple website
+displayin the messae 'Hello World!'. Ensure that the service is running on
+port 82

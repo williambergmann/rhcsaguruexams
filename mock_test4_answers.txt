@@ -1,0 +1,246 @@
+RHCSA Practice Answers - Batch 14
+
+---
+Task 1: Enable IPv6 Forwarding
+
+1.  Edit a sysctl configuration file (create one if needed):
+sudo nano /etc/sysctl.d/90-ipv6-forward.conf
+
+2.  Add the following line:
+net.ipv6.conf.all.forwarding = 1
+
+3.  Save and exit the editor.
+
+4.  Apply the setting to the running kernel:
+sudo sysctl -p /etc/sysctl.d/90-ipv6-forward.conf
+(Or `sudo sysctl -p` to load all files)
+
+5.  Verify the running setting:
+sudo sysctl net.ipv6.conf.all.forwarding
+(Should output: net.ipv6.conf.all.forwarding = 1)
+
+---
+Task 2: User max, UID 6000, no login
+
+1.  Create the user with specified options:
+sudo useradd -u 6000 -s /sbin/nologin max
+
+2.  Verify creation:
+id max
+getent passwd max
+
+---
+Task 3: SELinux Type Change for /etc/ssh
+
+(Warning: This is non-standard and may break SSH functionality)
+1.  Install semanage tool if needed:
+sudo dnf install policycoreutils-python-utils -y
+
+2.  Define the persistent file context rule:
+sudo semanage fcontext -a -t var_log_t "/etc/ssh(/.*)?"
+
+3.  Apply the context change recursively:
+sudo restorecon -Rv /etc/ssh
+
+4.  Verify current context:
+ls -Zd /etc/ssh
+ls -Z /etc/ssh/sshd_config # Check a file inside too
+
+---
+Task 4: Podman Pull ubi8, Run as user harry
+
+1.  Pull the UBI 8 image:
+podman pull registry.access.redhat.com/ubi8
+
+2.  Create user 'harry' if needed:
+id harry &>/dev/null || sudo useradd -m harry
+
+3.  Run the container:
+podman run -d --name ubi8-container --user harry registry.access.redhat.com/ubi8 sleep infinity
+(Note: `sleep infinity` keeps the container running)
+
+4.  Verify container is running:
+podman ps -f name=ubi8-container
+
+5.  Verify user inside container (optional):
+podman exec ubi8-container whoami
+(Should output 'harry')
+
+---
+Task 5: users.sh Script
+
+1.  Create the workspace directory:
+mkdir -p /root/workspace
+
+2.  Create the script file:
+nano /root/workspace/users.sh
+
+3.  Add the script content:
+#!/bin/bash
+
+# Check if exactly one argument is given
+if [ "$#" -ne 1 ]; then
+  echo "Usage: $0 <username1,username2,...>" >&2
+  exit 1
+fi
+
+USER_LIST="$1"
+PASSWORD="student@rhel"
+
+# Set IFS to comma to split the list
+IFS=',' read -ra USERNAMES <<< "$USER_LIST"
+
+# Loop through usernames
+for USER in "${USERNAMES[@]}"; do
+  # Trim whitespace (optional but good practice)
+  USER=$(echo "$USER" | xargs)
+  if [ -z "$USER" ]; then
+      continue # Skip empty names
+  fi
+
+  # Check if user exists, create if not
+  if ! id "$USER" &>/dev/null; then
+    echo "Creating user $USER..."
+    useradd "$USER"
+    if [ $? -ne 0 ]; then
+      echo "Error creating user $USER." >&2
+      continue
+    fi
+  else
+    echo "User $USER already exists."
+  fi
+
+  # Set password
+  echo "Setting password for $USER..."
+  echo "$PASSWORD" | passwd --stdin "$USER"
+  if [ $? -ne 0 ]; then
+    echo "Error setting password for $USER." >&2
+  fi
+done
+
+echo "User processing complete."
+exit 0
+
+
+4.  Save and exit the editor.
+
+5.  Make the script executable:
+chmod +x /root/workspace/users.sh
+
+6.  Example Usage:
+sudo /root/workspace/users.sh "usertest1,usertest2"
+
+---
+Task 6: Create LVM Partition Type
+
+1.  Identify free space on /dev/nvme1n1:
+sudo fdisk -l /dev/nvme1n1
+(Or use `parted /dev/nvme1n1 print free`)
+
+2.  Use a partitioning tool (e.g., fdisk):
+sudo fdisk /dev/nvme1n1
+
+3.  Inside fdisk:
+    n (new partition)
+    Enter partition number (e.g., 4 if p1,p2,p3 exist)
+    Enter start sector (accept default)
+    Enter end sector or size (e.g., +500M)
+    t (change type)
+    Enter partition number (e.g., 4)
+    Enter type code '8e' (for MBR) or alias 'Linux LVM' or GUID 'E6D6D379-F507-44C2-A23C-238F2A3DF928' (for GPT - `gdisk` might be clearer for GPT)
+    p (print to verify)
+    w (write changes)
+
+4.  Inform the kernel:
+sudo partprobe /dev/nvme1n1
+
+5.  Verify:
+lsblk /dev/nvme1n1
+sudo fdisk -l /dev/nvme1n1
+
+---
+Task 7: Find and Copy coder's Files
+
+1.  Ensure user `coder` exists (if needed for testing):
+id coder &>/dev/null || sudo useradd coder
+sudo touch /home/coder/coderfile1.txt
+sudo chown coder:coder /home/coder/coderfile1.txt
+
+2.  Create the backup directory:
+sudo mkdir -p /root/Backup
+
+3.  Find and copy the files:
+sudo find / -user coder -exec cp -a {} /root/Backup/ \;
+(-a preserves attributes)
+
+4.  Verify (optional):
+sudo ls -lA /root/Backup/
+
+---
+Task 8: Add 512M Swap Partition on nvme2n1
+
+1.  Create partition on /dev/nvme2n1 (assume it exists):
+sudo fdisk /dev/nvme2n1
+(Inside fdisk: n -> p -> 1 -> default start -> +512M -> t -> 82 (Linux swap) -> w)
+
+2.  Inform kernel:
+sudo partprobe /dev/nvme2n1
+
+3.  Format as swap:
+sudo mkswap /dev/nvme2n1p1
+(Note the UUID output)
+
+4.  Add to /etc/fstab using UUID:
+SWAP_UUID=$(sudo blkid -s UUID -o value /dev/nvme2n1p1)
+echo "UUID=${SWAP_UUID} none swap defaults 0 0" | sudo tee -a /etc/fstab
+
+5.  Activate swap spaces defined in fstab:
+sudo swapon -a
+
+6.  Verify:
+swapon -s
+free -h
+
+---
+Task 9: ACLs on /var/tmp/fstab (harry/natasha)
+
+1.  Copy the file:
+sudo cp /etc/fstab /var/tmp/fstab
+
+2.  Set owner/group:
+sudo chown root:root /var/tmp/fstab
+
+3.  Ensure users exist:
+id harry &>/dev/null || sudo useradd harry
+id natasha &>/dev/null || sudo useradd natasha
+
+4.  Set basic permissions (e.g., owner rw, group r, other r, no execute):
+sudo chmod 644 /var/tmp/fstab
+
+5.  Set ACLs:
+sudo setfacl -m u:harry:rw- /var/tmp/fstab
+sudo setfacl -m u:natasha:--- /var/tmp/fstab
+(Note: Other read is already set by base 644)
+
+6.  Verify ACLs:
+getfacl /var/tmp/fstab
+
+---
+Task 10: Persistent Journald Log Storage (100M Limit)
+
+1.  Edit journald configuration file:
+sudo nano /etc/systemd/journald.conf
+
+2.  Find/modify/uncomment the following lines under `[Journal]`:
+Storage=persistent
+SystemMaxUse=100M
+
+3.  Save and exit the editor.
+
+4.  Restart the journald service:
+sudo systemctl restart systemd-journald
+
+5.  Verify settings (storage type and size):
+journalctl --disk-usage
+(Size may take time to adjust if currently larger)
+grep -E '^\s*(Storage|SystemMaxUse)' /etc/systemd/journald.conf

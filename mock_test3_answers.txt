@@ -1,0 +1,241 @@
+RHCSA Practice Answers - Batch 13
+
+---
+Task 1: User Max, Group sysadmin, Sudo NOPASSWD, Expiry
+
+1. Create group:
+sudo groupadd sysadmin
+
+2. Create user Max, add to group, set expiry:
+sudo useradd -G sysadmin -e 2025-12-31 Max
+
+3. Configure sudoers (USE VISUDO):
+sudo visudo
+
+4. Add these two lines inside visudo:
+Max      ALL=(ALL) NOPASSWD: ALL
+%sysadmin ALL=(ALL) NOPASSWD: ALL
+
+5. Save and exit visudo.
+
+6. Verify expiry:
+sudo chage -l Max
+
+---
+Task 2: /etc/skel File and Max's Cron Job
+
+1. Create the template file in /etc/skel:
+sudo touch /etc/skel/Todo.txt
+
+2. Edit Max's crontab (assuming Max exists from Task 1):
+sudo crontab -u Max -e
+
+3. Add the following line:
+* * * * * logger "Ex200 Testing"
+
+4. Save and exit the editor.
+
+5. Verify the crontab entry:
+sudo crontab -l -u Max
+
+---
+Task 3: Start firewalld and Allow HTTP
+
+1. Start and enable firewalld:
+sudo systemctl enable --now firewalld
+
+2. Verify service status:
+sudo systemctl status firewalld
+
+3. Add the HTTP service permanently to the default zone:
+sudo firewall-cmd --permanent --add-service=http
+
+4. Reload the firewall to apply the change:
+sudo firewall-cmd --reload
+
+5. Verify the service is added:
+sudo firewall-cmd --list-services
+
+---
+Task 4: symlink.sh Script
+
+1. Create the script file:
+nano /home/symlink.sh
+(Use sudo if needed to write to /home, or create in user dir and move)
+
+2. Add script content:
+#!/bin/bash
+LINK_NAME="/home/jerry"
+TARGET="/etc/passwd"
+
+if [ -L "$LINK_NAME" ]; then
+  echo "Already existed"
+else
+  ln -s "$TARGET" "$LINK_NAME"
+  if [ $? -eq 0 ]; then
+    echo "Created"
+  else
+    echo "Error creating link" >&2
+    exit 1
+  fi
+fi
+exit 0
+
+3. Save and exit editor.
+
+4. Make executable:
+sudo chmod +x /home/symlink.sh
+(Adjust ownership if needed: sudo chown appropriate_user:appropriate_group /home/symlink.sh)
+
+5. Run to test 'Created':
+sudo /home/symlink.sh
+
+6. Run again to test 'Already existed':
+sudo /home/symlink.sh
+
+7. Clean up:
+sudo rm /home/jerry
+
+---
+Task 5: Stratis Pool Create and Extend
+
+1. Install Stratis packages (if needed):
+sudo dnf install stratis-cli stratisd -y
+
+2. Start and enable Stratis service:
+sudo systemctl enable --now stratisd
+
+3. Create the pool (replace nvme1n1 with correct device if needed):
+sudo stratis pool create mypool /dev/nvme1n1
+
+4. Add the second disk to the pool:
+sudo stratis pool add-data mypool /dev/nvme2n1
+
+5. Verify:
+sudo stratis pool list
+sudo stratis blockdev list mypool
+
+---
+Task 6: Container as Systemd Service (logserver)
+
+1. Install Podman (if needed):
+sudo dnf install container-tools -y
+
+2. Pull the image (correcting user name):
+podman pull docker.io/rhcsaguru/rsyslog
+
+3. Run the container initially (to base generation on, name required):
+podman run -d --name logserver rhcsaguru/rsyslog
+
+4. Generate the systemd unit file:
+cd /etc/systemd/system/
+sudo podman generate systemd --name --files --restart-policy=always logserver
+
+5. Reload systemd daemon:
+sudo systemctl daemon-reload
+
+6. Enable and start the service:
+sudo systemctl enable --now container-logserver.service
+
+7. Verify service status:
+sudo systemctl status container-logserver.service
+sudo podman ps # Check container is running via systemd
+
+---
+Task 7: Container Local Repo
+
+1. Pull the image:
+podman pull docker.io/rhcsaguru/local-repo
+
+2. Run the container, mapping port 80:
+podman run -d --name repo_server -p 80:80 rhcsaguru/local-repo
+
+3. Verify container and port:
+podman ps
+podman port repo_server
+
+4. Create the repo file:
+sudo nano /etc/yum.repos.d/local.repo
+
+5. Add content:
+[local]
+name=Local Container Repo
+baseurl=http://localhost:80/
+enabled=1
+gpgcheck=0
+
+6. Save and exit.
+
+7. Verify repo listing:
+sudo dnf repolist enabled | grep local
+
+8. Install package using ONLY the local repo:
+sudo dnf --disablerepo="*" --enablerepo="local" install ngrep -y
+
+9. Verify package installed:
+rpm -q ngrep
+
+---
+Task 8: Dummy Network Interface
+
+1. Set hostname:
+sudo hostnamectl set-hostname dev.example.com
+
+2. Create and configure dummy connection:
+sudo nmcli connection add type dummy con-name dummy0 ifname dummy0 ipv4.method manual ipv4.addresses 192.168.1.42/24 ipv4.gateway 192.168.1.1 ipv4.dns 8.8.8.8
+
+3. Activate the connection:
+sudo nmcli connection up dummy0
+
+4. Verify:
+ip addr show dummy0
+ip route show default
+cat /etc/resolv.conf
+hostnamectl status
+nmcli connection show dummy0
+
+---
+Task 9: Create LVM vg/lv and mount
+
+1. Initialize PV:
+sudo pvcreate /dev/nvme1n1
+
+2. Create VG:
+sudo vgcreate guruvg /dev/nvme1n1
+
+3. Create LV:
+sudo lvcreate -L 5100M -n gurulv guruvg
+
+4. Format LV:
+sudo mkfs.ext4 /dev/guruvg/gurulv
+(Using ext4 as ext3 is older)
+
+5. Create Mount Point:
+sudo mkdir /mymount
+
+6. Add fstab entry:
+LV_UUID=$(sudo blkid -s UUID -o value /dev/guruvg/gurulv)
+echo "UUID=${LV_UUID} /mymount ext4 defaults 0 0" | sudo tee -a /etc/fstab
+
+7. Mount and verify:
+sudo mount -a
+findmnt /mymount
+df -hT /mymount
+
+---
+Task 10: Extend LVM vg/lv
+
+1. Initialize new PV:
+sudo pvcreate /dev/nvme2n1
+
+2. Extend VG:
+sudo vgextend guruvg /dev/nvme2n1
+
+3. Extend LV and resize filesystem:
+sudo lvextend -L 8G --resizefs /dev/guruvg/gurulv
+(Or `sudo lvextend -L 8G /dev/guruvg/gurulv` followed by `sudo resize2fs /dev/guruvg/gurulv` if ext4, or `sudo xfs_growfs /mymount` if XFS and mounted)
+
+4. Verify:
+sudo lvs /dev/guruvg/gurulv
+sudo vgs guruvg
+df -h /mymount

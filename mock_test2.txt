@@ -1,0 +1,40 @@
+Task 1 - Check if the system has running sshd service then confiure the sshd
+to enable password authentication.
+
+Task 2 - Set up an NTP server to synchronize its clock with the server at
+'time.google.com'.
+
+Task 3 - With root access on a RHEL 9 system, create the user Micky and
+assign password 'rhel@123'. Then, construct a script named rhcsa that shows
+Welcome to user Micky when anyone lo in as Micky.
+
+Task 4 - Extract all rows containing the word 'error' from the
+/var/log/messages file and save them to a file named 'errors.log' in the /tmp
+directory in same order as they appear in the original file.
+
+Task 5 - Create a new file in /home directory named 'testfile' and give
+read-write-execute permissions to the owner and read-execute permissions to
+the group and others.
+
+Task 6 - Set the system timezone to America/New_York via timedatectl;
+aterwards, archive and compress the /var/tmp directory into /root/test.tar.gz
+
+Task 7 - Confiure SELinux (Security-Enhanced Linux) to operate in
+'Permissive' mode and change the active tuned profile to balanced.
+
+Task 8 - Create a user 'coder' if it doesn’t exist and then configure the system
+for 'coder' to have a password which expires in 90 days and must be at least 10
+characters long.
+
+Task 9 - Using the provided RHEL system, complete the ollowin tasks:
+* Create Users named 'Alex', 'Bob', 'Charlie' and 'David'.
+* Create a group named 'developers' and add 'Alex' & 'Bob' as secondary
+members.
+* Create a group named 'managers' and add 'Charlie' & 'David' as secondary
+members.
+* Add members to group in same order as mentioned.
+
+Task 10 - Create a group named 'friends' and add 'Alex', 'Bob' (create users if
+not present) as secondary members. Create a file named 'friendsCircle' in the
+/home directory and assign the access of the file to 'friends' group only, make
+Alex the owner of the file and friends group as the group owner.

@@ -1,0 +1,152 @@
+RHCSA Practice Answers - Batch 11
+
+---
+Task 1: Cron Job
+
+1. Open the root user's crontab for editing:
+sudo crontab -e
+
+2. Add the following line:
+0 12 * * 1-5 echo "Hello_World" >> /var/log/messages
+
+3. Save and exit the editor.
+
+---
+Task 2: Find root entry and edit shell
+
+1. Find the root entry and save to file:
+grep '^root:' /etc/passwd > /home/users_entry
+
+2. Edit the saved file to change the shell:
+sed -i 's|/bin/bash$|/bin/sh|' /home/users_entry
+
+---
+Task 3: SSH Limits & Password Aging
+
+1. Edit the SSH server configuration file:
+sudo vi /etc/ssh/sshd_config
+
+2. Find the line starting with `#MaxAuthTries` (or add it if missing).
+Uncomment it (remove `#`) and set the value to 3:
+MaxAuthTries 3
+
+3. Save and exit the editor.
+
+4. Restart the sshd service to apply the change:
+sudo systemctl restart sshd
+
+5. Edit the login definitions file:
+sudo vi /etc/login.defs
+
+6. Find the line starting with `PASS_MAX_DAYS`.
+Change its value to 20:
+PASS_MAX_DAYS	20
+
+7. Save and exit the editor. (This setting affects newly created users).
+
+---
+Task 4: Search and Pull Container Image
+
+1. Search for the image (optional but good practice):
+podman search redis
+
+2. Pull the official image (usually from docker.io):
+podman pull redis
+(Or explicit: podman pull docker.io/library/redis:latest)
+
+3. Verify the image was downloaded:
+podman images
+
+---
+Task 5: Configure SELinux Boolean
+
+1. Set the boolean value persistently:
+sudo setsebool -P container_manage_cgroup on
+
+2. Verify the change:
+getsebool container_manage_cgroup
+sudo semanage boolean -l | grep container_manage_cgroup
+
+---
+Task 6: Create User expert
+
+1. Create the user with specified attributes:
+sudo useradd -u 1500 -d /home/expertDir -s /bin/sh expert
+
+2. Set the password for the user:
+sudo passwd expert
+(Enter desired password twice when prompted)
+
+---
+Task 7: Group panel, User dev, Umask
+
+1. Create the group:
+sudo groupadd panel
+
+2. Create the user:
+sudo useradd dev
+
+3. Add user 'dev' to the 'panel' group:
+sudo usermod -aG panel dev
+
+4. Edit the user's bash startup file to set umask:
+sudo vi /home/dev/.bashrc
+(Or use `nano`)
+
+5. Add the following line at the end of the file:
+umask 0277
+
+6. Save and exit the editor.
+
+7. Set ownership of the .bashrc file (important if edited as root):
+sudo chown dev:dev /home/dev/.bashrc
+
+(Note: The umask change takes effect on the *next* login for user dev).
+
+---
+Task 8: Set Hostname
+
+1. Set the hostname persistently:
+sudo hostnamectl set-hostname dev
+
+2. Verify the change:
+hostnamectl status
+hostname
+
+---
+Task 9: Create directory and change ownership
+
+1. Create the directory:
+mkdir /home/example
+
+2. Change the user ownership:
+sudo chown expert /home/example
+(If group ownership also needs changing: sudo chown expert:expert /home/example)
+
+---
+Task 10: Configure httpd on Port 82
+
+1. Install Apache:
+sudo dnf install httpd -y
+
+2. Create the index file:
+echo "Hello World!" | sudo tee /var/www/html/index.html
+
+3. Configure httpd to listen on port 82:
+sudo sed -i 's/^Listen 80/Listen 82/' /etc/httpd/conf/httpd.conf
+
+4. Allow port 82 via SELinux:
+sudo semanage port -a -t http_port_t -p tcp 82
+(Install policycoreutils-python-utils if semanage not found)
+
+5. Allow port 82 via firewall:
+sudo firewall-cmd --permanent --add-port=82/tcp
+sudo firewall-cmd --reload
+
+6. Enable and start the httpd service:
+sudo systemctl enable --now httpd
+
+7. Verify:
+curl http://localhost:82
+systemctl status httpd
+ss -tlpn | grep :82

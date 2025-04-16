@@ -1,0 +1,210 @@
+RHCSA Practice Answers - Batch 12
+
+---
+Task 1: Configure SSHD Password Auth
+
+1. Check SSHD status:
+sudo systemctl status sshd
+
+2. If inactive, start it (optional for config edit):
+sudo systemctl start sshd
+
+3. Edit the SSHD configuration file:
+sudo vi /etc/ssh/sshd_config
+
+4. Find the line `#PasswordAuthentication yes` or `PasswordAuthentication no`.
+Uncomment it if necessary (remove the leading `#`).
+Change the value to `yes`:
+PasswordAuthentication yes
+
+5. Save and exit the editor (:wq).
+
+6. Reload or restart the SSHD service to apply changes:
+sudo systemctl reload sshd
+(Or `sudo systemctl restart sshd`)
+
+---
+Task 2: Configure NTP Client (chrony)
+
+1. Install Chrony (if not installed):
+sudo dnf install chrony -y
+
+2. Edit the Chrony configuration file:
+sudo vi /etc/chrony.conf
+
+3. Comment out any existing `server` or `pool` lines (add `#` at the beginning).
+Add the specified server line:
+server time.google.com iburst
+
+4. Save and exit the editor.
+
+5. Enable and restart the chronyd service:
+sudo systemctl enable --now chronyd
+
+6. Verify synchronization status after a minute or two:
+chronyc sources -v
+chronyc tracking
+timedatectl status
+
+---
+Task 3: User Micky, Password, Login Script
+
+1. Create the user:
+sudo useradd Micky
+
+2. Set the password:
+echo "rhel@123" | sudo passwd --stdin Micky
+
+3. Create the script file:
+sudo nano /usr/local/bin/rhcsa
+
+4. Add the script content:
+#!/bin/bash
+echo "Welcome to user $LOGNAME"
+
+5. Save and exit the editor (Ctrl+O, Enter, Ctrl+X).
+
+6. Make the script executable:
+sudo chmod 755 /usr/local/bin/rhcsa
+
+7. Add script execution to Micky's bash profile:
+echo "/usr/local/bin/rhcsa" | sudo tee -a /home/Micky/.bash_profile
+(Also consider adding to .bashrc if non-login shells should also trigger it)
+sudo chown Micky:Micky /home/Micky/.bash_profile
+
+8. Verification:
+su - Micky
+(You should see the welcome message)
+exit
+
+---
+Task 4: Grep 'error' from messages log
+
+1. Run the grep command and redirect output:
+sudo grep -i 'error' /var/log/messages > /tmp/errors.log
+(Using sudo in case /var/log/messages needs root read access)
+
+2. Verify the contents:
+less /tmp/errors.log
+
+---
+Task 5: Create file and set permissions (755)
+
+1. Create the empty file:
+touch /home/testfile
+
+2. Set permissions using octal mode:
+chmod 755 /home/testfile
+
+3. Verify permissions:
+ls -l /home/testfile
+(Should show `-rwxr-xr-x`)
+
+---
+Task 6: Set Timezone and Archive /var/tmp
+
+1. Set the timezone:
+sudo timedatectl set-timezone America/New_York
+
+2. Verify the timezone change:
+timedatectl
+
+3. Create the compressed tar archive:
+sudo tar -czf /root/test.tar.gz /var/tmp
+(-c create, -z gzip, -f file)
+
+4. Verify archive creation:
+ls -l /root/test.tar.gz
+
+---
+Task 7: SELinux Permissive Mode and Tuned Profile
+
+1. Set SELinux to Permissive mode temporarily:
+sudo setenforce 0
+
+2. Verify the mode change:
+getenforce
+sestatus
+
+3. Apply the 'balanced' tuned profile persistently:
+sudo tuned-adm profile balanced
+
+4. Verify the active profile:
+tuned-adm active
+
+(Note: setenforce 0 is temporary. To make permissive persistent, edit /etc/selinux/config and reboot).
+
+---
+Task 8: User coder, Password Expiry, Password Length
+
+1. Create user 'coder' if it doesn't exist:
+id coder &>/dev/null || sudo useradd coder
+
+2. Set password maximum age to 90 days:
+sudo chage -M 90 coder
+
+3. Edit password quality configuration:
+sudo vi /etc/security/pwquality.conf
+
+4. Find the line `# minlen = 9` (or similar).
+Uncomment it (remove `#`) and change the value to 10:
+minlen = 10
+
+5. Save and exit the editor.
+(Note: This setting affects future password changes system-wide).
+
+---
+Task 9: Create Users and Groups (dev/mgr)
+
+1. Create users:
+sudo useradd Alex
+sudo useradd Bob
+sudo useradd Charlie
+sudo useradd David
+
+2. Create groups:
+sudo groupadd developers
+sudo groupadd managers
+
+3. Add members to 'developers':
+sudo usermod -aG developers Alex
+sudo usermod -aG developers Bob
+
+4. Add members to 'managers':
+sudo usermod -aG managers Charlie
+sudo usermod -aG managers David
+
+5. Verify memberships:
+id Alex
+id Bob
+id Charlie
+id David
+getent group developers
+getent group managers
+
+---
+Task 10: Group friends, File ownership/permissions
+
+1. Create group (if needed):
+getent group friends &>/dev/null || sudo groupadd friends
+
+2. Ensure users exist (if needed):
+id Alex &>/dev/null || sudo useradd Alex
+id Bob &>/dev/null || sudo useradd Bob
+
+3. Add users to group:
+sudo usermod -aG friends Alex
+sudo usermod -aG friends Bob
+
+4. Create the file:
+touch /home/friendsCircle
+
+5. Set ownership:
+sudo chown Alex:friends /home/friendsCircle
+
+6. Set permissions (Owner=rwx, Group=rwx, Other=---):
+chmod 770 /home/friendsCircle
+
+7. Verify:
+ls -l /home/friendsCircle
+(Should show permissions -rwxrwx---+, owner Alex, group friends)

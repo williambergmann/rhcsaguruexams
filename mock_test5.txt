@@ -1,0 +1,37 @@
+Task 1 - Set the tuned profile for your system to powersave.
+
+Task 2 - Create a shared directory named /home/admins and ensure it has the
+following characteristics: the directory should belong to the adminuser group,
+and members of this group should have read and write access to the directory.
+Additionally, any files created within /home/admins should automatically
+inherit the adminuser group as the group ownership.
+
+Task 3 - Create a shell script named multilines.sh in the /home/coder
+directory. The script should use a or loop to enerate three lines, each
+containing the text test1, test2, and test3 on separate lines.
+
+Task 4 - Format the two disks, nvme1n1 and nvme2n1, using Linux RAID
+auto-formatting. Then, create a RAID array named /dev/md0 and mount this
+RAID array to the directory /raid1.
+
+Task 5 - Add a new environment variable named EXAM with the value redhat.
+Ensure that this variable is available or all users during remote login sessions.
+
+Task 6 - Create a new user named Tom and configure the system to restrict
+SSH access so that only the user Tom is permitted to connect.
+
+Task 7 - Using Stratis, create a pool named redhat on the disk /dev/nvme1n1,
+create a filesystem named rhcsa, mount it to a directory named /guru, and
+then create a snapshot of the filesystem named rhcsa-snap.
+
+Task 8 - Set up an FTP server on a RHEL system. Ensure that it allows
+anonymous users to download files from the /var/ftp/pub directory. Add a file
+named testfile.txt inside /var/ftp/pub and verify that an anonymous
+user can download it using FTP.
+
+Task 9 - Confiure the system to lo all daemon-related messages to a file
+named daemonlog.log located in the /var/log directory.
+
+Task 10 - Search or all files in the /usr/share directory that are greater than
+30KB and less than 50KB. Save the search results into a file called search.txt
+in the /home/coder/workspace directory.

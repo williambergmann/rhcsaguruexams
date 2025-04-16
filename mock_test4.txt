@@ -1,0 +1,33 @@
+Task 1 - Configure the system to enable IPv6 packet forwardin. Ensure that
+the configuration persists across system reboots.
+
+Task 2 - Create a user named max with a User ID (UID) of 6000, ensuring the
+user has no access to an interactive shell.
+
+Task 3 - Modiy the SELinux type of the /etc/ssh directory to var_log_t
+
+Task 4 - Use Podman to pull the registry.access.redhat.com/ubi8 image and
+run a container named ‘ubi8-container’ from it. Ensure the container runs with
+a user named harry. I the harry user does not already exist on the system,
+create it.
+
+Task 5 - Write a script named users.sh in workspace directory to add multiple
+users based on a comma-separated list of usernames provided as input. Set
+the password for each newly created user to student@rhel.
+
+Task 6 - Create a partition table of type Linux LVM on the disk /dev/nvme1n1.
+
+Task 7 - Locate all files owned by the coder user and copy them to the
+/root/Backup directory.
+
+Task 8 - Create a 512MB swap partition on the disk /dev/nvme2n1
+
+Task 9 - Copy the file /etc/stab to /var/tmp. Set permissions and ACLs on
+/var/tmp/stab to meet the following requirements:
+* Owned by user root and group root.
+* User harry has read and write permissions.
+* User natasha (create the user if it doesn't exist) cannot read or write.
+* All other users (current and future) can read the file.
+
+Task 10 - Configure the system to enable persistent Journald log storage with
+a maximum size of 100 M.

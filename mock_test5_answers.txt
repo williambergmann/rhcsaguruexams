@@ -1,0 +1,252 @@
+RHCSA Practice Answers - Batch 15
+
+---
+Task 1: Set Tuned Profile to powersave
+
+1.  Apply the 'powersave' profile:
+sudo tuned-adm profile powersave
+
+2.  Verify the active profile:
+tuned-adm active
+(Should show 'Current active profile: powersave')
+
+---
+Task 2: Shared Directory /home/admins (adminuser)
+
+1.  Create the group if it doesn't exist:
+sudo groupadd adminuser
+
+2.  Create the directory:
+sudo mkdir /home/admins
+
+3.  Set group ownership:
+sudo chown :adminuser /home/admins
+
+4.  Set permissions (group rwx) and SGID bit:
+sudo chmod 2770 /home/admins
+(2=SGID, 7=owner rwx, 7=group rwx, 0=other ---)
+
+5.  Verify permissions and ownership:
+ls -ld /home/admins
+(Should show drwxrws---. and group 'adminuser')
+
+---
+Task 3: multilines.sh Script
+
+1.  Ensure user coder and home directory exist:
+id coder &>/dev/null || sudo useradd -m coder
+
+2.  Create the script file:
+sudo nano /home/coder/multilines.sh
+(Or use `vi`)
+
+3.  Add the script content:
+#!/bin/bash
+for i in 1 2 3
+do
+  echo "test${i}"
+done
+
+4.  Save and exit the editor.
+
+5.  Make the script executable:
+sudo chmod +x /home/coder/multilines.sh
+
+6.  Set correct ownership:
+sudo chown coder:coder /home/coder/multilines.sh
+
+7.  Run to verify (optional):
+sudo -u coder /home/coder/multilines.sh
+
+---
+Task 4: Create RAID1 Array /dev/md0
+
+(Warning: This assumes /dev/nvme1n1 and /dev/nvme2n1 are unused/available)
+1.  Install mdadm:
+sudo dnf install mdadm -y
+
+2.  Zero superblock (optional, ensures clean state):
+sudo mdadm --zero-superblock /dev/nvme1n1
+sudo mdadm --zero-superblock /dev/nvme2n1
+
+3.  Create the RAID1 array:
+sudo mdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/nvme1n1 /dev/nvme2n1
+
+4.  Verify creation (check progress):
+cat /proc/mdstat
+sudo mdadm --detail /dev/md0
+
+5.  Create filesystem (e.g., ext4):
+sudo mkfs.ext4 /dev/md0
+
+6.  Create mount point:
+sudo mkdir /raid1
+
+7.  Add to /etc/fstab for persistent mount:
+MD_UUID=$(sudo blkid -s UUID -o value /dev/md0)
+echo "UUID=${MD_UUID} /raid1 ext4 defaults 0 0" | sudo tee -a /etc/fstab
+(Alternatively use /dev/md0 directly in fstab, but UUID is preferred)
+
+8.  Mount and verify:
+sudo mount -a
+df -hT /raid1
+findmnt /raid1
+
+---
+Task 5: System-wide Environment Variable EXAM=redhat
+
+1.  Edit the system-wide environment file:
+sudo nano /etc/environment
+
+2.  Add the following line:
+EXAM=redhat
+
+3.  Save and exit the editor.
+
+4.  Edit the system-wide profile to source it (if not already done):
+sudo nano /etc/profile
+
+5.  Add/ensure this line is present and uncommented:
+source /etc/environment
+(Or `. /etc/environment`)
+
+6.  Save and exit.
+
+7.  Verification: Log out and log back in (or start a new SSH session).
+echo $EXAM
+(Should output 'redhat')
+
+---
+Task 6: Create user Tom, Restrict SSH access
+
+1.  Create the user:
+sudo useradd Tom
+
+2.  Set the password:
+sudo passwd Tom
+(Enter a password twice when prompted)
+
+3.  Edit the SSH server configuration file:
+sudo vi /etc/ssh/sshd_config
+
+4.  Add the following line (ensure no other AllowUsers/AllowGroups directives conflict):
+AllowUsers Tom
+
+5.  Save and exit the editor.
+
+6.  Restart the SSH service:
+sudo systemctl restart sshd
+
+7.  Verify: Try SSHing in as 'Tom' (should work) and as another user (should fail).
+
+---
+Task 7: Stratis Pool, Filesystem, Mount, Snapshot
+
+1.  Install Stratis (if needed):
+sudo dnf install stratis-cli stratisd -y
+
+2.  Enable and start service:
+sudo systemctl enable --now stratisd
+
+3.  Create the pool (replace device if needed):
+sudo stratis pool create redhat /dev/nvme1n1
+
+4.  Create the filesystem:
+sudo stratis filesystem create redhat rhcsa
+
+5.  Create the mount point:
+sudo mkdir /guru
+
+6.  Add persistent mount to /etc/fstab:
+FS_UUID=$(sudo blkid -s UUID -o value /dev/stratis/redhat/rhcsa)
+echo "UUID=${FS_UUID} /guru xfs defaults,x-systemd.requires=stratisd.service 0 0" | sudo tee -a /etc/fstab
+(Note: Adding the systemd requires dependency is best practice for Stratis)
+
+7.  Mount and verify:
+sudo mount -a
+df -hT /guru
+findmnt /guru
+
+8.  Create the snapshot:
+sudo stratis filesystem snapshot redhat rhcsa rhcsa-snap
+
+9.  Verify snapshot:
+sudo stratis filesystem list redhat
+
+---
+Task 8: Configure vsftpd Anonymous Download
+
+1.  Install vsftpd:
+sudo dnf install vsftpd -y
+
+2.  Enable and start service:
+sudo systemctl enable --now vsftpd
+
+3.  Configure vsftpd for anonymous access:
+sudo vi /etc/vsftpd/vsftpd.conf
+Ensure (or add/uncomment) the line:
+anonymous_enable=YES
+(Check that other settings don't block anonymous access, e.g., `anon_upload_enable` should likely be NO or commented)
+Save and exit.
+
+4.  Create the public directory and test file:
+sudo mkdir -p /var/ftp/pub
+echo "Anonymous Test Download" | sudo tee /var/ftp/pub/testfile.txt
+sudo chmod 644 /var/ftp/pub/testfile.txt # Ensure readable
+
+5.  Restart vsftpd service:
+sudo systemctl restart vsftpd
+
+6.  Configure firewall:
+sudo firewall-cmd --permanent --add-service=ftp
+sudo firewall-cmd --reload
+
+7.  Verify (using an ftp client, e.g., `lftp` or command-line `ftp`):
+ftp localhost
+Name: anonymous
+Password: <press enter or type email>
+ftp> cd pub
+ftp> get testfile.txt
+ftp> bye
+
+---
+Task 9: Configure rsyslog for daemon facility
+
+1.  Edit rsyslog configuration (create a new file for clarity):
+sudo nano /etc/rsyslog.d/10-daemon.conf
+
+2.  Add the following lines:
+# Log daemon facility messages to specific file
+daemon.* /var/log/daemonlog.log
+# Stop processing daemon messages further to avoid duplication in /var/log/messages
+daemon.* stop
+# The 'stop' directive might be '~' in older rsyslog versions
+
+3.  Save and exit.
+
+4.  Restart rsyslog service:
+sudo systemctl restart rsyslog
+
+5.  Verify log file is created and receiving daemon messages (may need to trigger some):
+ls -l /var/log/daemonlog.log
+sudo logger -p daemon.info "Testing daemon log configuration"
+sudo grep "Testing daemon log configuration" /var/log/daemonlog.log
+sudo grep "Testing daemon log configuration" /var/log/messages # Should NOT appear here
+
+---
+Task 10: Find files by size range
+
+1.  Ensure user/workspace directories exist:
+id coder &>/dev/null || sudo useradd -m coder
+sudo mkdir -p /home/coder/workspace
+sudo chown -R coder:coder /home/coder/workspace
+
+2.  Run the find command:
+sudo find /usr/share -type f -size +30k -size -50k -print > /home/coder/workspace/search.txt
+
+3.  Set ownership of the results file (optional but good practice):
+sudo chown coder:coder /home/coder/workspace/search.txt
+
+4.  Verify:
+ls -l /home/coder/workspace/search.txt
+less /home/coder/workspace/search.txt # Check contents
