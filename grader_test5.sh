@@ -1,6 +1,6 @@
 #!/bin/bash
-# Grader script - Batch 15 (Based on Mock Test 5) - CORRECTED HELPER LOGIC
-# Version: 2024-03-10-fixed
+# Grader script - Mock Test 5 - CORRECTED HELPER LOGIC
+# Version: 2025-04-17-fixed
 
 # --- Configuration ---
 REPORT_FILE="/tmp/exam-report-batch15.txt"
