@@ -1,6 +1,7 @@
+
 #!/bin/bash
-# Combined Grader Script - 10 Task Practice Set
-# Version: 2024-03-10
+# Grader script - Mock Exam 1 / Q1-10 CORRECTED
+# Version: 2025-04-17-fixed
 
 # --- Practice Tasks ---
 # Task 1: Create a cron job for root that appends "Hello_World" to /var/log/messages at 12:00 PM on weekdays (Mon-Fri).
@@ -15,8 +16,9 @@
 # Task 10: Install httpd. Create /var/www/html/index.html with "Hello World!". Configure httpd to listen on port 82. Allow port 82 via SELinux (http_port_t) and firewall. Ensure httpd is running and enabled.
 # --- End Practice Tasks ---
 
+
 # --- Configuration ---
-REPORT_FILE="/tmp/exam-report-10tasks.txt"
+REPORT_FILE="/tmp/exam-report-batch11.txt"
 PASS_THRESHOLD_PERCENT=70 # Percentage required to pass
 MAX_SCORE=300
 
@@ -27,7 +29,6 @@ COLOR_INFO="\033[1m"
 COLOR_RESET="\033[0m"
 
 # --- Objective Mapping ---
-# Assign each task to a primary objective category number (1-10)
 # 1=Tools, 2=Scripts, 3=Operate, 4=LocalStore, 5=FSConfig,
 # 6=Deploy/Maintain, 7=Network, 8=Users/Groups, 9=Security, 10=Containers
 declare -A TASK_OBJECTIVE=(
@@ -65,66 +66,115 @@ for i in {1..10}; do
     OBJECTIVE_TOTAL[$i]=0
 done
 
-# --- Helper Functions ---
+# --- Corrected Helper Functions ---
 check_file_exists() {
     local target_path="$1"
-    local points_ok="$2"
-    local points_fail="$3"
     if [ -e "$target_path" ]; then
         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t File/Directory '$target_path' exists." | tee -a ${REPORT_FILE}
-        return $points_ok
+        return 0 # Standard success exit code
     else
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t File/Directory '$target_path' does not exist." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Standard failure exit code
     fi
 }
 
 check_file_content() {
     local target_path="$1"
     local pattern="$2"
-    local points_ok="$3"
-    local points_fail="$4"
-    local grep_opts="$5"
+    local grep_opts="$3" # Optional grep options like -E, -i, -F, -q etc.
     if [ ! -f "$target_path" ]; then
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Cannot check content, file '$target_path' does not exist." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Failure
     fi
     if grep ${grep_opts} -- "${pattern}" "$target_path" &>/dev/null; then
         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t File '$target_path' contains expected pattern '${pattern}'." | tee -a ${REPORT_FILE}
-        return $points_ok
+        return 0 # Success
     else
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t File '$target_path' does not contain expected pattern '${pattern}'." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Failure
     fi
 }
 
 check_command_output() {
     local cmd="$1"
     local pattern="$2"
-    local points_ok="$3"
-    local points_fail="$4"
-    local grep_opts="$5"
+    local grep_opts="$3" # Optional grep options
+    # Run command capturing both stdout and stderr
     if eval "$cmd" 2>&1 | grep ${grep_opts} -- "${pattern}" &>/dev/null; then
         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Command '$cmd' output contains expected pattern '${pattern}'." | tee -a ${REPORT_FILE}
-        return $points_ok
+        return 0 # Success
     else
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Command '$cmd' output does not contain expected pattern '${pattern}'." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Failure
     fi
 }
 
 check_service_status() {
     local service="$1"
     local state="$2" # active or enabled
-    local points_ok="$3"
-    local points_fail="$4"
     if systemctl "is-${state}" --quiet "$service"; then
         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Service '$service' is $state." | tee -a ${REPORT_FILE}
-        return $points_ok
+        return 0 # Success
     else
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Service '$service' is NOT $state." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Failure
     fi
+}
+
+check_mount() { # $1=mount_point, $2=device_pattern, $3=fs_type_pattern, $4=options_pattern
+    local mount_point="$1"
+    local device_pattern="$2" # Can be device path or UUID/LABEL=...
+    local fs_type_pattern="$3"
+    local options_pattern="$4" # Regex pattern for options
+    local mount_line
+    mount_line=$(findmnt -n -o SOURCE,TARGET,FSTYPE,OPTIONS --target "$mount_point" 2>/dev/null)
+
+    if [[ -z "$mount_line" ]]; then
+         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount point '$mount_point' not found or nothing mounted." | tee -a ${REPORT_FILE}
+         return 1 # Failure
+    fi
+
+    local source=$(echo "$mount_line" | awk '{print $1}')
+    local fstype=$(echo "$mount_line" | awk '{print $3}')
+    local options=$(echo "$mount_line" | awk '{print $4}')
+    local all_ok=true
+
+    # Check device (allow UUID/LABEL/Path)
+    if [[ "$device_pattern" == UUID=* ]] || [[ "$device_pattern" == LABEL=* ]]; then
+         local expected_dev=$(blkid -t "$device_pattern" -o device 2>/dev/null)
+         # If blkid fails or doesn't find it, try matching source itself
+         if [[ -z "$expected_dev" ]] || ! echo "$source" | grep -q "$expected_dev"; then
+              if ! echo "$source" | grep -Eq "$device_pattern"; then
+                   echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount check: Source '$source' doesn't match expected device/UUID/Label '$device_pattern'." | tee -a ${REPORT_FILE}
+                   all_ok=false
+              fi
+         fi
+    elif ! echo "$source" | grep -Eq "$device_pattern"; then # Check if source matches path pattern
+        echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount check: Source '$source' doesn't match expected pattern '$device_pattern'." | tee -a ${REPORT_FILE}
+        all_ok=false
+    fi
+    # Check fstype
+    if ! echo "$fstype" | grep -Eq "$fs_type_pattern"; then
+         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount check: FStype '$fstype' doesn't match expected pattern '$fs_type_pattern'." | tee -a ${REPORT_FILE}
+         all_ok=false
+    fi
+    # Check options
+    if ! echo "$options" | grep -Eq "$options_pattern"; then
+        echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount check: Options '$options' don't contain expected pattern '$options_pattern'." | tee -a ${REPORT_FILE}
+        all_ok=false
+    fi
+
+    if $all_ok; then
+        echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Mount point '$mount_point' appears correctly configured and mounted." | tee -a ${REPORT_FILE}
+        return 0 # Success
+    else
+        return 1 # Failure
+    fi
+}
+
+add_score() {
+    local points=$1
+    SCORE=$(( SCORE + points ))
 }
 
 # Function to update scores (overall and by objective)
@@ -134,7 +184,7 @@ grade_task() {
     local points_earned=$3
     local obj_index=${TASK_OBJECTIVE[$task_num]}
 
-    SCORE=$(( SCORE + points_earned ))
+    add_score "$points_earned"
     TOTAL=$(( TOTAL + points_possible )) # Keep track of total attempted points
 
     if [[ -n "$obj_index" ]]; then
@@ -156,38 +206,31 @@ fi
 # Clean up previous report
 rm -f ${REPORT_FILE} &>/dev/null
 touch ${REPORT_FILE} &>/dev/null
-echo "Starting Grade Evaluation - 10 Task Set - $(date)" | tee -a ${REPORT_FILE}
-echo "------------------------------------------------" | tee -a ${REPORT_FILE}
+echo "Starting Grade Evaluation Batch 11 (Corrected) - $(date)" | tee -a ${REPORT_FILE}
+echo "-----------------------------------------------------" | tee -a ${REPORT_FILE}
 
 # Initialize score variables
 SCORE=0
-TOTAL=0 # Total points *attempted* by the script
+TOTAL=0
 
 # --- Pre-check: SELinux ---
 echo -e "${COLOR_INFO}Pre-check: SELinux Status${COLOR_RESET}" | tee -a ${REPORT_FILE}
 if getenforce | grep -iq enforcing &>/dev/null; then
     echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t SELinux is in Enforcing mode." | tee -a ${REPORT_FILE}
 else
-    echo -e "${COLOR_FAIL}[FATAL]${COLOR_RESET}\t Task evaluation cannot proceed reliably because SELinux is not in enforcing mode. Set SELinux to enforcing mode ('setenforce 1' and check /etc/selinux/config) and try again." | tee -a ${REPORT_FILE}
-    exit 666
+    echo -e "${COLOR_FAIL}[FATAL]${COLOR_RESET}\t Task evaluation may be unreliable because SELinux is not in enforcing mode." | tee -a ${REPORT_FILE}
 fi
 echo -e "\n" | tee -a ${REPORT_FILE}
-
 # --- Task Evaluation ---
 
 ### TASK 1: Cron Job
 CURRENT_TASK=1; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Cron Job (Hello_World)${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
-CRON_CMD_1='echo "Hello_World" >> /var/log/messages'
-CRON_SCHED_1="0 12 * * 1-5"
+CRON_CMD_1='echo "Hello_World" >> /var/log/messages' # Corrected path
+CRON_SCHED_1="0 12 \* \* 1-5"
 CRON_USER="root"
-if crontab -l -u $CRON_USER 2>/dev/null | grep -Fq "$CRON_SCHED_1 $CRON_CMD_1" || \
-   grep -Frq "$CRON_SCHED_1 $CRON_USER $CRON_CMD_1" /etc/cron.d/ /etc/crontab; then
-    echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Found scheduled task: '$CRON_SCHED_1 ($CRON_USER) $CRON_CMD_1'" | tee -a ${REPORT_FILE}
-    T_SCORE=30
-else
-    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Did not find '$CRON_SCHED_1 $CRON_CMD_1' in '$CRON_USER''s crontab or system cron files." | tee -a ${REPORT_FILE}
-fi
+check_command_output "crontab -l -u $CRON_USER 2>/dev/null || cat /etc/cron.d/* /etc/crontab 2>/dev/null" "$CRON_SCHED_1 .*$CRON_USER.* $CRON_CMD_1"
+if [[ $? -eq 0 ]]; then T_SCORE=30; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Cron entry not found correctly."; fi
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
 
@@ -195,22 +238,15 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 CURRENT_TASK=2; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Find root entry and edit shell${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
 USER_FILE="/home/users_entry"
-rm -f $USER_FILE # Clean previous run
-# Check file creation with root entry
-grep -q '^root:' /etc/passwd > "$USER_FILE" # Simulate user action
-if [ -f "$USER_FILE" ] && grep -q '^root:' "$USER_FILE"; then
-    echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t '$USER_FILE' created and contains root entry." | tee -a ${REPORT_FILE}
-    T_SCORE=$(( T_SCORE + 15 ))
-    # Check if shell was modified to /bin/sh IN THE FILE
-    if grep -q '^root:.*:/bin/sh$' "$USER_FILE"; then
-         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Shell for root in '$USER_FILE' is set to /bin/sh." | tee -a ${REPORT_FILE}
-         T_SCORE=$(( T_SCORE + 15 ))
-    else
-         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Shell for root in '$USER_FILE' was not modified to /bin/sh." | tee -a ${REPORT_FILE}
-    fi
-else
-    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Failed to create '$USER_FILE' or it doesn't contain root entry." | tee -a ${REPORT_FILE}
+TASK_POINTS=0
+check_file_exists "$USER_FILE"
+if [[ $? -eq 0 ]]; then
+    TASK_POINTS=$((TASK_POINTS + 15))
+    # Check final content (contains root, new shell /bin/sh)
+    check_file_content "$USER_FILE" '^root:.*:/bin/sh$' '' # Grep opts empty
+    if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 15)); fi
 fi
+T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
 
@@ -218,8 +254,10 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 CURRENT_TASK=3; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: SSH Limits & Password Aging${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
 TASK_POINTS=0
-if grep -Eq '^\s*MaxAuthTries\s+3' /etc/ssh/sshd_config; then TASK_POINTS=$((TASK_POINTS + 15)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t MaxAuthTries 3 found."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t MaxAuthTries 3 not found."; fi
-if grep -Eq '^\s*PASS_MAX_DAYS\s+20' /etc/login.defs; then TASK_POINTS=$((TASK_POINTS + 15)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t PASS_MAX_DAYS 20 found."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t PASS_MAX_DAYS 20 not found."; fi
+check_file_content "/etc/ssh/sshd_config" "^\s*MaxAuthTries\s+3"
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 15)); fi
+check_file_content "/etc/login.defs" "^\s*PASS_MAX_DAYS\s+20"
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 15)); fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
@@ -232,11 +270,11 @@ TASK_POINTS=0
 # Check if podman exists
 if ! command -v podman &> /dev/null; then dnf install -y container-tools &>/dev/null; fi
 # Cannot reliably check 'search' output, so check pull success only
-if podman image exists docker.io/library/redis:latest || podman image exists redis:latest || podman image exists redis; then
-    echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Redis image found locally (pull successful)." | tee -a ${REPORT_FILE}
+if podman image exists docker.io/library/redis:latest || podman image exists docker.io/library/redis || podman image exists redis:latest || podman image exists redis; then
     TASK_POINTS=30
+    echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Redis image found locally (pull successful)."
 else
-    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Redis image not found locally." | tee -a ${REPORT_FILE}
+    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Redis image not found locally."
 fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
@@ -250,7 +288,7 @@ TASK_POINTS=0
 # Check running state
 if getsebool "$BOOLEAN_NAME" | grep -q ' --> on$'; then TASK_POINTS=$((TASK_POINTS + 15)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Boolean '$BOOLEAN_NAME' is currently 'on'."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Boolean '$BOOLEAN_NAME' is currently 'off'."; fi
 # Check persistent value
-if semanage boolean -l | grep "^${BOOLEAN_NAME}\s*(" | grep -q '(on '; then TASK_POINTS=$((TASK_POINTS + 15)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Boolean '$BOOLEAN_NAME' persistent setting is 'on'."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Boolean '$BOOLEAN_NAME' persistent setting is 'off'."; fi
+if semanage boolean -l | grep "^${BOOLEAN_NAME}\s*(" | grep -q '(on '; then TASK_POINTS=$((TASK_POINTS + 15)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Boolean '$BOOLEAN_NAME' persistent state is 'on'."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Boolean '$BOOLEAN_NAME' persistent state is 'off'."; fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
@@ -274,17 +312,16 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 ### TASK 7: Group panel, User dev, umask
 CURRENT_TASK=7; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Group panel, User dev, umask${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
-GROUP_NAME="panel"; USER_NAME="dev"; EXPECTED_UMASK="0277" # umask 0277 gives file=400(r), dir=500(rx) as per Q
+GROUP_NAME="panel"; USER_NAME="dev"; EXPECTED_UMASK="0277"
 TASK_POINTS=0
-if getent group "$GROUP_NAME" &>/dev/null; then TASK_POINTS=$(( TASK_POINTS + 5 )); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Group '$GROUP_NAME' exists."; else groupadd "$GROUP_NAME"; echo -e "${COLOR_FAIL}[INFO]${COLOR_RESET}\t Group '$GROUP_NAME' created."; fi
-if id "$USER_NAME" &>/dev/null; then TASK_POINTS=$(( TASK_POINTS + 5 )); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t User '$USER_NAME' exists."; else useradd "$USER_NAME"; echo -e "${COLOR_FAIL}[INFO]${COLOR_RESET}\t User '$USER_NAME' created."; fi
-if id -nG "$USER_NAME" | grep -qw "$GROUP_NAME"; then TASK_POINTS=$(( TASK_POINTS + 10 )); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t User '$USER_NAME' in group '$GROUP_NAME'."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t User '$USER_NAME' not in group '$GROUP_NAME'."; fi
-# Check umask - Needs to run command *as the user* or check config file
+if getent group "$GROUP_NAME" &>/dev/null; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Group '$GROUP_NAME' exists."; else groupadd "$GROUP_NAME"; echo -e "${COLOR_FAIL}[INFO]${COLOR_RESET}\t Group '$GROUP_NAME' created."; fi
+if id "$USER_NAME" &>/dev/null; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t User '$USER_NAME' exists."; else useradd "$USER_NAME"; echo -e "${COLOR_FAIL}[INFO]${COLOR_RESET}\t User '$USER_NAME' created."; fi
+if id -nG "$USER_NAME" | grep -qw "$GROUP_NAME"; then TASK_POINTS=$((TASK_POINTS + 10)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t User '$USER_NAME' in group '$GROUP_NAME'."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t User '$USER_NAME' not in group '$GROUP_NAME'."; fi
 if [ -f "/home/${USER_NAME}/.bashrc" ] && grep -Eq "^\s*umask\s+${EXPECTED_UMASK}" "/home/${USER_NAME}/.bashrc"; then
-    TASK_POINTS=$(( TASK_POINTS + 10 ))
+    TASK_POINTS=$((TASK_POINTS + 10))
     echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t umask ${EXPECTED_UMASK} found in /home/${USER_NAME}/.bashrc."
 else
-    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t umask ${EXPECTED_UMASK} not found in /home/${USER_NAME}/.bashrc."
+    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t umask ${EXPECTED_UMASK} not found configured in /home/${USER_NAME}/.bashrc."
 fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
@@ -293,7 +330,8 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 ### TASK 8: Set Hostname
 CURRENT_TASK=8; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Set Hostname to 'dev'${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
-if hostnamectl status | grep -q 'Static hostname: dev'; then T_SCORE=30; echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Hostname is 'dev'."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Hostname is not 'dev'."; fi
+check_command_output "hostnamectl status" "Static hostname: dev"
+if [[ $? -eq 0 ]]; then T_SCORE=30; fi
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
 
@@ -302,16 +340,17 @@ CURRENT_TASK=9; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Create dire
 T_SCORE=0; T_TOTAL=30
 DIR_NAME="/home/example"; OWNER_NAME="expert"
 TASK_POINTS=0
-if [ -d "$DIR_NAME" ]; then
+check_file_exists "$DIR_NAME"
+if [[ $? -eq 0 ]]; then
     TASK_POINTS=$(( TASK_POINTS + 15 ))
-    echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Directory '$DIR_NAME' exists."
     if [[ $(stat -c %U "$DIR_NAME") == "$OWNER_NAME" ]]; then
          TASK_POINTS=$(( TASK_POINTS + 15 ))
          echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Directory '$DIR_NAME' owner is '$OWNER_NAME'."
     else
-         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Directory '$DIR_NAME' owner is not '$OWNER_NAME'."
+         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Directory '$DIR_NAME' owner is not '$OWNER_NAME' (Found: $(stat -c %U "$DIR_NAME"))."
     fi
-else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Directory '$DIR_NAME' does not exist."; fi
+# else failure message printed by check_file_exists
+fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
@@ -321,15 +360,22 @@ CURRENT_TASK=10; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Configure 
 T_SCORE=0; T_TOTAL=30
 TASK_POINTS=0
 if ! rpm -q httpd &>/dev/null; then dnf install -y httpd &>/dev/null; fi # Install if needed
-if [ -f /var/www/html/index.html ] && grep -q 'Hello World!' /var/www/html/index.html; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t index.html exists with content."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t index.html missing/incorrect."; fi
-if grep -Eq '^\s*Listen\s+82' /etc/httpd/conf/httpd.conf; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Listen 82 found."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Listen 82 not found."; fi
-if semanage port -l | grep '^http_port_t' | grep -qw 82; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t SELinux port 82 labeled."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t SELinux port 82 not labeled."; fi
-if firewall-cmd --list-ports --permanent 2>/dev/null | grep -qw 82/tcp ; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Firewall allows 82/tcp."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Firewall does not allow 82/tcp."; fi
-check_service_status httpd active 5 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
-check_service_status httpd enabled 5 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
+check_file_content "/var/www/html/index.html" "Hello World!" "" # Grep opts empty
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
+check_file_content "/etc/httpd/conf/httpd.conf" "^\s*Listen\s+82" ""
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
+check_command_output "semanage port -l" "^http_port_t.* tcp .*82" "-E" # Use regex for semanage
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
+check_command_output "firewall-cmd --list-ports --permanent" "82/tcp" "" # Simple check
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
+check_service_status httpd active
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
+check_service_status httpd enabled
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
+
 
 # --- Final Grading ---
 echo "------------------------------------------------" | tee -a ${REPORT_FILE}
@@ -341,6 +387,7 @@ clear
 echo -e "\nPerformance on exam objectives:\n" | tee -a ${REPORT_FILE}
 printf " \t%-45s : %s\n" "OBJECTIVE" "SCORE" | tee -a ${REPORT_FILE}
 printf " \t%-45s : %s\n" "---------------------------------------------" "------" | tee -a ${REPORT_FILE}
+GRAND_TOTAL_POSSIBLE=0
 for i in {1..10}; do
     OBJ_NAME=${OBJECTIVE_NAMES[$i]:-"Unknown Objective $i"}
     OBJ_SCORE_VAL=${OBJECTIVE_SCORE[$i]:-0}
@@ -348,15 +395,25 @@ for i in {1..10}; do
     PERCENT=0
     if [[ $OBJ_TOTAL_VAL -gt 0 ]]; then
         PERCENT=$(( OBJ_SCORE_VAL * 100 / OBJ_TOTAL_VAL ))
+        GRAND_TOTAL_POSSIBLE=$(( GRAND_TOTAL_POSSIBLE + OBJ_TOTAL_VAL ))
     fi
-    printf " \t%-45s : %s%%\n" "$OBJ_NAME" "$PERCENT" | tee -a ${REPORT_FILE}
+    # Only display objectives that had tasks assigned
+    if [[ $OBJ_TOTAL_VAL -gt 0 ]]; then
+        printf " \t%-45s : %s%%\n" "$OBJ_NAME" "$PERCENT" | tee -a ${REPORT_FILE}
+    fi
 done
 echo -e "\n------------------------------------------------" | tee -a ${REPORT_FILE}
 
 # --- Calculate Overall Score ---
-PASS_SCORE=$(( MAX_SCORE * PASS_THRESHOLD_PERCENT / 100 ))
+if [[ $GRAND_TOTAL_POSSIBLE -lt $MAX_SCORE ]] && [[ $GRAND_TOTAL_POSSIBLE -gt 0 ]]; then
+    PASS_SCORE=$(( GRAND_TOTAL_POSSIBLE * PASS_THRESHOLD_PERCENT / 100 ))
+    MAX_SCORE_ADJUSTED=$GRAND_TOTAL_POSSIBLE
+else
+    PASS_SCORE=$(( MAX_SCORE * PASS_THRESHOLD_PERCENT / 100 ))
+    MAX_SCORE_ADJUSTED=$MAX_SCORE
+fi
 
-echo -e "\nPassing score:\t\t${PASS_SCORE} ( ${PASS_THRESHOLD_PERCENT}% of ${MAX_SCORE} points)" | tee -a ${REPORT_FILE}
+echo -e "\nPassing score:\t\t${PASS_SCORE} ( ${PASS_THRESHOLD_PERCENT}% of ${MAX_SCORE_ADJUSTED} points possible)" | tee -a ${REPORT_FILE}
 echo -e "Your score:\t\t${SCORE}" | tee -a ${REPORT_FILE}
 echo -e "\n" | tee -a ${REPORT_FILE}
 
