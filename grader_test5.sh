@@ -1,6 +1,6 @@
 #!/bin/bash
-# Grader script - Batch 15 (Based on Mock Test 5)
-# Version: 2024-03-10
+# Grader script - Batch 15 (Based on Mock Test 5) - CORRECTED HELPER LOGIC
+# Version: 2024-03-10-fixed
 
 # --- Configuration ---
 REPORT_FILE="/tmp/exam-report-batch15.txt"
@@ -51,67 +51,112 @@ for i in {1..10}; do
     OBJECTIVE_TOTAL[$i]=0
 done
 
-# --- Helper Functions ---
+# --- Corrected Helper Functions ---
 check_file_exists() {
     local target_path="$1"
-    local points_ok="$2"
-    local points_fail="$3"
     if [ -e "$target_path" ]; then
         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t File/Directory '$target_path' exists." | tee -a ${REPORT_FILE}
-        return $points_ok
+        return 0 # Standard success exit code
     else
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t File/Directory '$target_path' does not exist." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Standard failure exit code
     fi
 }
 
 check_file_content() {
     local target_path="$1"
     local pattern="$2"
-    local points_ok="$3"
-    local points_fail="$4"
-    local grep_opts="$5"
+    local grep_opts="$3" # Optional grep options like -E, -i, -F, -q etc.
     if [ ! -f "$target_path" ]; then
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Cannot check content, file '$target_path' does not exist." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Failure
     fi
     if grep ${grep_opts} -- "${pattern}" "$target_path" &>/dev/null; then
         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t File '$target_path' contains expected pattern '${pattern}'." | tee -a ${REPORT_FILE}
-        return $points_ok
+        return 0 # Success
     else
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t File '$target_path' does not contain expected pattern '${pattern}'." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Failure
     fi
 }
 
 check_command_output() {
     local cmd="$1"
     local pattern="$2"
-    local points_ok="$3"
-    local points_fail="$4"
-    local grep_opts="$5"
+    local grep_opts="$3" # Optional grep options
+    # Run command capturing both stdout and stderr
     if eval "$cmd" 2>&1 | grep ${grep_opts} -- "${pattern}" &>/dev/null; then
         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Command '$cmd' output contains expected pattern '${pattern}'." | tee -a ${REPORT_FILE}
-        return $points_ok
+        return 0 # Success
     else
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Command '$cmd' output does not contain expected pattern '${pattern}'." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Failure
     fi
 }
 
 check_service_status() {
     local service="$1"
     local state="$2" # active or enabled
-    local points_ok="$3"
-    local points_fail="$4"
     if systemctl "is-${state}" --quiet "$service"; then
         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Service '$service' is $state." | tee -a ${REPORT_FILE}
-        return $points_ok
+        return 0 # Success
     else
         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Service '$service' is NOT $state." | tee -a ${REPORT_FILE}
-        return $points_fail
+        return 1 # Failure
     fi
 }
+
+check_mount() { # $1=mount_point, $2=device_pattern, $3=fs_type_pattern, $4=options_pattern
+    local mount_point="$1"
+    local device_pattern="$2" # Can be device path or UUID/LABEL=...
+    local fs_type_pattern="$3"
+    local options_pattern="$4" # Regex pattern for options
+    local mount_line
+    mount_line=$(findmnt -n -o SOURCE,TARGET,FSTYPE,OPTIONS --target "$mount_point" 2>/dev/null)
+
+    if [[ -z "$mount_line" ]]; then
+         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount point '$mount_point' not found or nothing mounted." | tee -a ${REPORT_FILE}
+         return 1 # Failure
+    fi
+
+    local source=$(echo "$mount_line" | awk '{print $1}')
+    local fstype=$(echo "$mount_line" | awk '{print $3}')
+    local options=$(echo "$mount_line" | awk '{print $4}')
+    local all_ok=true
+
+    # Check device (allow UUID/LABEL/Path)
+    if [[ "$device_pattern" == UUID=* ]] || [[ "$device_pattern" == LABEL=* ]]; then
+         local expected_dev=$(blkid -t "$device_pattern" -o device 2>/dev/null)
+         # If blkid fails or doesn't find it, try matching source itself
+         if [[ -z "$expected_dev" ]] || ! echo "$source" | grep -q "$expected_dev"; then
+              if ! echo "$source" | grep -Eq "$device_pattern"; then
+                   echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount check: Source '$source' doesn't match expected device/UUID/Label '$device_pattern'." | tee -a ${REPORT_FILE}
+                   all_ok=false
+              fi
+         fi
+    elif ! echo "$source" | grep -Eq "$device_pattern"; then # Check if source matches path pattern
+        echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount check: Source '$source' doesn't match expected pattern '$device_pattern'." | tee -a ${REPORT_FILE}
+        all_ok=false
+    fi
+    # Check fstype
+    if ! echo "$fstype" | grep -Eq "$fs_type_pattern"; then
+         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount check: FStype '$fstype' doesn't match expected pattern '$fs_type_pattern'." | tee -a ${REPORT_FILE}
+         all_ok=false
+    fi
+    # Check options
+    if ! echo "$options" | grep -Eq "$options_pattern"; then
+        echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Mount check: Options '$options' don't contain expected pattern '$options_pattern'." | tee -a ${REPORT_FILE}
+        all_ok=false
+    fi
+
+    if $all_ok; then
+        echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Mount point '$mount_point' appears correctly configured and mounted." | tee -a ${REPORT_FILE}
+        return 0 # Success
+    else
+        return 1 # Failure
+    fi
+}
+
 
 add_score() {
     local points=$1
@@ -148,8 +193,8 @@ fi
 # Clean up previous report
 rm -f ${REPORT_FILE} &>/dev/null
 touch ${REPORT_FILE} &>/dev/null
-echo "Starting Grade Evaluation Batch 15 - $(date)" | tee -a ${REPORT_FILE}
-echo "-----------------------------------------" | tee -a ${REPORT_FILE}
+echo "Starting Grade Evaluation Batch 15 (Corrected) - $(date)" | tee -a ${REPORT_FILE}
+echo "-----------------------------------------------------" | tee -a ${REPORT_FILE}
 
 # Initialize score variables
 SCORE=0
@@ -169,12 +214,8 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 CURRENT_TASK=1; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Set Tuned Profile to powersave${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
 EXPECTED_PROFILE="powersave"
-if tuned-adm active | grep -q "$EXPECTED_PROFILE"; then
-    T_SCORE=30
-    echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Active tuned profile is '$EXPECTED_PROFILE'."
-else
-    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Active tuned profile is not '$EXPECTED_PROFILE' (Found: $(tuned-adm active | awk '/Current active profile:/ {print $4}'))."
-fi
+check_command_output "tuned-adm active" "$EXPECTED_PROFILE"
+if [[ $? -eq 0 ]]; then T_SCORE=30; fi
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
 
@@ -186,8 +227,9 @@ TASK_POINTS=0
 # Check group exists
 if ! getent group $GROUP_NAME_2 &>/dev/null; then groupadd $GROUP_NAME_2; echo -e "${COLOR_FAIL}[INFO]${COLOR_RESET}\t Group '$GROUP_NAME_2' created."; else echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Group '$GROUP_NAME_2' exists."; fi
 # Check directory exists
-check_file_exists "$DIR_2" 5 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
-if [[ $T_SUB_SCORE -eq 5 ]]; then
+check_file_exists "$DIR_2"
+if [[ $? -eq 0 ]]; then
+    TASK_POINTS=$((TASK_POINTS + 5))
     # Check group owner
     if [[ $(stat -c %G "$DIR_2") == "$GROUP_NAME_2" ]]; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Directory group owner is '$GROUP_NAME_2'."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Directory group owner is not '$GROUP_NAME_2'."; fi
     # Check permissions (rwxrws--- : 2770 allows group rwx + SGID)
@@ -195,7 +237,8 @@ if [[ $T_SUB_SCORE -eq 5 ]]; then
     if [[ "$PERMS_OCT_2" == "2770" ]]; then TASK_POINTS=$((TASK_POINTS + 20)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Permissions are 2770 (group rwx + SGID).";
     elif [[ -g "$DIR_2" ]]; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t SGID set, but permissions ($PERMS_OCT_2) not 2770.";
     else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Permissions ($PERMS_OCT_2) and/or SGID incorrect (expected 2770)."; fi
-else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Directory '$DIR_2' does not exist."; fi
+# else Do nothing, failure printed by check_file_exists
+fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
@@ -203,28 +246,27 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 ### TASK 3: multilines.sh Script
 CURRENT_TASK=3; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: multilines.sh Script${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
-# Ensure user coder and dir exist
-id coder &>/dev/null || useradd -m coder
+id coder &>/dev/null || useradd -m coder # Ensure user/dir exists
 SCRIPT_DIR="/home/coder"; SCRIPT_PATH="$SCRIPT_DIR/multilines.sh"
 mkdir -p "$SCRIPT_DIR"; chown coder:coder "$SCRIPT_DIR"
 TASK_POINTS=0
-check_file_exists "$SCRIPT_PATH" 10 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
-if [[ $T_SUB_SCORE -eq 10 ]]; then
-     if [ -x "$SCRIPT_PATH" ]; then
+check_file_exists "$SCRIPT_PATH"
+if [[ $? -eq 0 ]]; then
+    TASK_POINTS=$((TASK_POINTS + 10))
+    if [ -x "$SCRIPT_PATH" ]; then
           TASK_POINTS=$((TASK_POINTS + 10))
           echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Script '$SCRIPT_PATH' is executable."
           # Test script output
           OUTPUT_3=$("$SCRIPT_PATH" 2>&1)
-          if [[ $(echo "$OUTPUT_3" | wc -l) -eq 3 ]] && \
-             echo "$OUTPUT_3" | sed -n '1p' | grep -q "test1" && \
-             echo "$OUTPUT_3" | sed -n '2p' | grep -q "test2" && \
-             echo "$OUTPUT_3" | sed -n '3p' | grep -q "test3"; then
+          EXPECTED_OUTPUT="test1\ntest2\ntest3"
+          if [[ "$OUTPUT_3" == "$EXPECTED_OUTPUT" ]]; then
                TASK_POINTS=$((TASK_POINTS + 10))
-               echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Script output is correct (test1, test2, test3 on separate lines)."
+               echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Script output is correct."
           else
-               echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Script output incorrect. Expected test1\\ntest2\\ntest3. Got:\n$OUTPUT_3"
+               echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Script output incorrect. Expected 'test1\\ntest2\\ntest3'. Got:\n$OUTPUT_3"
           fi
-     else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Script '$SCRIPT_PATH' is not executable."; fi
+    else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Script '$SCRIPT_PATH' is not executable."; fi
+# else Failure printed by check_file_exists
 fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
@@ -239,21 +281,29 @@ TASK_POINTS=0
 if ! rpm -q mdadm &>/dev/null; then dnf install -y mdadm &>/dev/null; fi
 # Check RAID device exists and is active
 if [ -b "$RAID_DEVICE" ] && mdadm --detail "$RAID_DEVICE" &>/dev/null; then
-    TASK_POINTS=$((TASK_POINTS + 10))
+    TASK_POINTS=$((TASK_POINTS + 5))
     echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t RAID device '$RAID_DEVICE' exists and is active."
     # Check RAID level and components
     if mdadm --detail "$RAID_DEVICE" | grep -q 'Raid Level : raid1' && \
-       mdadm --detail "$RAID_DEVICE" | grep -q "$DISK1" && \
-       mdadm --detail "$RAID_DEVICE" | grep -q "$DISK2"; then
+       mdadm --detail "$RAID_DEVICE" | grep -qw "$DISK1" && \
+       mdadm --detail "$RAID_DEVICE" | grep -qw "$DISK2"; then
         TASK_POINTS=$((TASK_POINTS + 10))
         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t RAID level is raid1 and contains correct member disks."
     else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t RAID level or member disks incorrect."; fi
     # Check mount point and persistent mount
-    check_mount "$MOUNT_POINT_4" "$RAID_DEVICE" "ext4\|xfs" "defaults" 10 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
-    # Check fstab entry exists (as specified in answer)
-    if ! grep -Fw "$MOUNT_POINT_4" /etc/fstab | grep "$RAID_DEVICE" &>/dev/null; then
-         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t fstab entry missing or incorrect for '$MOUNT_POINT_4'.";
-         if [[ $T_SUB_SCORE -eq 10 ]]; then TASK_POINTS=$((TASK_POINTS - 5)); fi # Deduct if mount ok but fstab bad
+    check_mount "$MOUNT_POINT_4" "$RAID_DEVICE" "ext4\|xfs" "defaults" # Check mount function call
+     if [[ $? -eq 0 ]]; then
+        TASK_POINTS=$((TASK_POINTS + 10)) # Points for being mounted correctly
+        # Check fstab entry exists
+        if ! grep -Fw "$MOUNT_POINT_4" /etc/fstab | grep -w "$RAID_DEVICE" &>/dev/null; then
+             echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t fstab entry missing or incorrect for '$MOUNT_POINT_4'.";
+             # Deduct points if mount ok but fstab bad
+             TASK_POINTS=$((TASK_POINTS - 5))
+        else
+            TASK_POINTS=$((TASK_POINTS + 5)) # Points for fstab entry
+             echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t fstab entry found for '$MOUNT_POINT_4'."
+        fi
+     # else Failure message printed by check_mount
     fi
 else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t RAID device '$RAID_DEVICE' not found or inactive."; fi
 T_SCORE=$TASK_POINTS
@@ -266,14 +316,9 @@ T_SCORE=0; T_TOTAL=30
 ENV_VAR_NAME="EXAM"; ENV_VAR_VALUE="redhat"
 TASK_POINTS=0
 # Check /etc/environment
-if grep -Eq "^\s*${ENV_VAR_NAME}\s*=\s*['\"]?${ENV_VAR_VALUE}['\"]?\s*$" /etc/environment; then
-    TASK_POINTS=$((TASK_POINTS + 15))
-    echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Found $ENV_VAR_NAME=$ENV_VAR_VALUE in /etc/environment."
-else
-    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t $ENV_VAR_NAME=$ENV_VAR_VALUE not found in /etc/environment."
-fi
-# Check /etc/profile sourcing /etc/environment or setting it directly
-# This check is less precise as sourcing methods can vary
+check_file_content "/etc/environment" "^\s*${ENV_VAR_NAME}\s*=\s*['\"]?${ENV_VAR_VALUE}['\"]?\s*$"
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 15)); fi
+# Check /etc/profile sourcing /etc/environment or setting directly
 if grep -Eq "^\s*(\.|source)\s+/etc/environment" /etc/profile || \
    grep -Eq "^\s*export\s+${ENV_VAR_NAME}\s*=\s*['\"]?${ENV_VAR_VALUE}['\"]?\s*$" /etc/profile /etc/profile.d/*.sh; then
     TASK_POINTS=$((TASK_POINTS + 15))
@@ -289,18 +334,14 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 ### TASK 6: Create user Tom, Restrict SSH access
 CURRENT_TASK=6; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Create user Tom, Restrict SSH access${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
-USER_TOM="Tom" # Case sensitive
+USER_TOM="Tom"
 TASK_POINTS=0
 # Check user exists and password set
 if id "$USER_TOM" &>/dev/null; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t User '$USER_TOM' exists."; else useradd "$USER_TOM"; echo -e "${COLOR_FAIL}[INFO]${COLOR_RESET}\t User '$USER_TOM' created."; fi
 if grep "^${USER_TOM}:" /etc/shadow | cut -d: -f2 | grep -q '^\$.*'; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Password for '$USER_TOM' appears set."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Password for '$USER_TOM' not set."; fi
 # Check sshd_config for AllowUsers
-if grep -Eq "^\s*AllowUsers\s+${USER_TOM}\s*$" /etc/ssh/sshd_config; then
-    TASK_POINTS=$((TASK_POINTS + 20))
-    echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t AllowUsers $USER_TOM found in sshd_config."
-else
-    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t AllowUsers $USER_TOM not found or incorrect in sshd_config."
-fi
+check_file_content "/etc/ssh/sshd_config" "^\s*AllowUsers\s+${USER_TOM}\s*$"
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 20)); else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t AllowUsers $USER_TOM not found or incorrect in sshd_config."; fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
@@ -311,23 +352,25 @@ T_SCORE=0; T_TOTAL=30
 POOL_NAME_7="redhat"; DISK_7="/dev/nvme1n1"; FS_NAME_7="rhcsa"; MOUNT_POINT_7="/guru"; SNAP_NAME_7="rhcsa-snap"
 TASK_POINTS=0
 # Check stratisd service
-if systemctl is-active stratisd --quiet && systemctl is-enabled stratisd --quiet; then TASK_POINTS=$((TASK_POINTS + 3)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t stratisd running/enabled."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t stratisd not running/enabled."; fi
+check_service_status stratisd active
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 3)); fi
+check_service_status stratisd enabled
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 2)); fi # 5 total for service
 # Check pool exists
 if stratis pool list | grep -qw "$POOL_NAME_7"; then TASK_POINTS=$((TASK_POINTS + 3)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Pool '$POOL_NAME_7' exists."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Pool '$POOL_NAME_7' not found."; fi
 # Check filesystem exists in pool
-if stratis filesystem list "$POOL_NAME_7" 2>/dev/null | grep -qw "$FS_NAME_7"; then TASK_POINTS=$((TASK_POINTS + 4)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Filesystem '$FS_NAME_7' exists in pool '$POOL_NAME_7'."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Filesystem '$FS_NAME_7' not found in pool '$POOL_NAME_7'."; fi
+if stratis filesystem list "$POOL_NAME_7" 2>/dev/null | grep -qw "$FS_NAME_7"; then TASK_POINTS=$((TASK_POINTS + 4)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Filesystem '$FS_NAME_7' exists."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Filesystem '$FS_NAME_7' not found."; fi
 # Check mount point exists and is mounted persistently
 FS_UUID_7=$(stratis filesystem list "$POOL_NAME_7" -n "$FS_NAME_7" --output=json 2>/dev/null | jq -r '.[].Uuid')
+MOUNT_OK=false
 if [[ -n "$FS_UUID_7" ]]; then
-    check_mount "$MOUNT_POINT_7" "UUID=$FS_UUID_7" "xfs" "defaults" 10 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
+    check_mount "$MOUNT_POINT_7" "UUID=$FS_UUID_7" "xfs" "defaults,x-systemd.requires=stratisd.service" # Stratis needs dependency
+    if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 8)); MOUNT_OK=true; fi
     # Check fstab entry
-    if ! grep -Fw "$MOUNT_POINT_7" /etc/fstab | grep "UUID=$FS_UUID_7" &>/dev/null; then
-         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t fstab entry missing/incorrect for Stratis FS '$MOUNT_POINT_7'.";
-         if [[ $T_SUB_SCORE -eq 10 ]]; then TASK_POINTS=$((TASK_POINTS - 5)); fi # Deduct points
-    fi
+    if grep -Fw "$MOUNT_POINT_7" /etc/fstab | grep "UUID=$FS_UUID_7" &>/dev/null; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t fstab entry found."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t fstab entry missing/incorrect."; if $MOUNT_OK; then TASK_POINTS=$((TASK_POINTS - 4)); fi; fi
 else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Could not get UUID for Stratis filesystem '$FS_NAME_7'."; fi
 # Check snapshot exists
-if stratis filesystem list "$POOL_NAME_7" 2>/dev/null | grep -qw "$SNAP_NAME_7"; then TASK_POINTS=$((TASK_POINTS + 10)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Snapshot '$SNAP_NAME_7' exists."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Snapshot '$SNAP_NAME_7' not found."; fi
+if stratis filesystem list "$POOL_NAME_7" 2>/dev/null | grep -qw "$SNAP_NAME_7"; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Snapshot '$SNAP_NAME_7' exists."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Snapshot '$SNAP_NAME_7' not found."; fi
 
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
@@ -341,12 +384,16 @@ FTP_PUB_DIR="/var/ftp/pub"; TEST_FILE="$FTP_PUB_DIR/testfile.txt"
 TASK_POINTS=0
 # Check package, service status
 if rpm -q vsftpd &>/dev/null; then TASK_POINTS=$((TASK_POINTS + 5)); else dnf install -y vsftpd &>/dev/null; echo -e "${COLOR_FAIL}[INFO]${COLOR_RESET}\t vsftpd installed."; fi
-check_service_status vsftpd active 5 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
-check_service_status vsftpd enabled 5 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
+check_service_status vsftpd active
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
+check_service_status vsftpd enabled
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
 # Check anonymous enable setting
-if grep -Eq '^\s*anonymous_enable\s*=\s*YES' /etc/vsftpd/vsftpd.conf; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t anonymous_enable=YES found."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t anonymous_enable=YES not found."; fi
+check_file_content "/etc/vsftpd/vsftpd.conf" "^\s*anonymous_enable\s*=\s*YES"
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t anonymous_enable=YES not found."; fi
 # Check pub directory and test file
-check_file_exists "$TEST_FILE" 5 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
+check_file_exists "$TEST_FILE"
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
 # Check firewall allows ftp
 if firewall-cmd --list-services --permanent 2>/dev/null | grep -qw ftp ; then TASK_POINTS=$((TASK_POINTS + 5)); echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Firewall allows 'ftp'."; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Firewall doesn't allow 'ftp'."; fi
 T_SCORE=$TASK_POINTS
@@ -356,21 +403,23 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 ### TASK 9: Configure rsyslog for daemon facility
 CURRENT_TASK=9; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Configure rsyslog for daemon facility${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
-TARGET_LOG_9="/var/log/daemonlog.log"
-RSYSLOG_CONF="/etc/rsyslog.conf" # Or /etc/rsyslog.d/*.conf
+TARGET_LOG_9="/var/log/daemonlog.log"; RSYSLOG_CONF_DIR="/etc/rsyslog.d"; RSYSLOG_CONF="/etc/rsyslog.conf"
 TASK_POINTS=0
-# Check rsyslog active
-check_service_status rsyslog active 5 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
+check_service_status rsyslog active
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 5)); fi
 # Check configuration file for daemon.* rule pointing ONLY to the target file
-# This is tricky to check perfectly, look for the specific line and maybe absence of daemon elsewhere
-if grep -Eq "^\s*daemon\.\*\s+-?${TARGET_LOG_9}" $RSYSLOG_CONF /etc/rsyslog.d/*.conf; then
-    TASK_POINTS=$((TASK_POINTS + 15))
-    echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Found rsyslog rule for daemon.* facility logging to '$TARGET_LOG_9'."
+FOUND_RULE=false
+if grep -Erq "^\s*daemon\.\*\s+-?${TARGET_LOG_9}" $RSYSLOG_CONF $RSYSLOG_CONF_DIR; then
+     # Check if it also logs elsewhere (e.g. messages) - more complex check omitted for simplicity
+     FOUND_RULE=true
+     TASK_POINTS=$((TASK_POINTS + 15))
+     echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Found rsyslog rule for daemon.* facility logging to '$TARGET_LOG_9'."
 else
-    echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Did not find rsyslog rule for daemon.* facility logging to '$TARGET_LOG_9'."
+     echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Did not find rsyslog rule for daemon.* logging to '$TARGET_LOG_9'."
 fi
 # Check target log file exists
-check_file_exists "$TARGET_LOG_9" 10 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
+check_file_exists "$TARGET_LOG_9"
+if [[ $? -eq 0 ]]; then TASK_POINTS=$((TASK_POINTS + 10)); fi
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
@@ -378,27 +427,32 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 ### TASK 10: Find files by size range
 CURRENT_TASK=10; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Find files by size range${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
-TARGET_FILE_10="/home/coder/workspace/search.txt"
-# Ensure dirs exist
-mkdir -p /home/coder/workspace; chown coder:coder /home/coder /home/coder/workspace
-# Create dummy files for test
+# Ensure user/dirs exist
+id coder &>/dev/null || useradd -m coder
+CODER_WORKSPACE="/home/coder/workspace"; mkdir -p "$CODER_WORKSPACE"; chown -R coder:coder "$CODER_WORKSPACE" /home/coder
+TARGET_FILE_10="$CODER_WORKSPACE/search.txt"
+# Create dummy files
 dd if=/dev/zero of=/usr/share/test_35k_file bs=1k count=35 &>/dev/null
 dd if=/dev/zero of=/usr/share/test_55k_file bs=1k count=55 &>/dev/null
 TASK_POINTS=0
-check_file_exists "$TARGET_FILE_10" 10 0; T_SUB_SCORE=$?; TASK_POINTS=$((TASK_POINTS + T_SUB_SCORE))
-if [[ $T_SUB_SCORE -eq 10 ]]; then
-    # Check content - should contain 35k file, should NOT contain 55k file
+check_file_exists "$TARGET_FILE_10"
+if [[ $? -eq 0 ]]; then
+    TASK_POINTS=$((TASK_POINTS + 10))
+    # Check content
+    CONTENT_OK=false
     if grep -q "/usr/share/test_35k_file" "$TARGET_FILE_10" && ! grep -q "/usr/share/test_55k_file" "$TARGET_FILE_10"; then
-        TASK_POINTS=$((TASK_POINTS + 20))
-        echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Target file '$TARGET_FILE_10' exists and contains correct size-based results."
+         CONTENT_OK=true
+         TASK_POINTS=$((TASK_POINTS + 20))
+         echo -e "${COLOR_OK}[OK]${COLOR_RESET}\t\t Target file '$TARGET_FILE_10' contains correct size-based results."
     else
-        echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Target file '$TARGET_FILE_10' content seems incorrect based on size filters."
+         echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Target file '$TARGET_FILE_10' content seems incorrect."
     fi
 fi
-rm -f /usr/share/test_35k_file /usr/share/test_55k_file # Cleanup dummy files
+rm -f /usr/share/test_35k_file /usr/share/test_55k_file # Cleanup
 T_SCORE=$TASK_POINTS
 grade_task $CURRENT_TASK $T_TOTAL $T_SCORE
 echo -e "\n" | tee -a ${REPORT_FILE}
+
 
 # --- Final Grading ---
 echo "------------------------------------------------" | tee -a ${REPORT_FILE}
@@ -420,7 +474,10 @@ for i in {1..10}; do
         PERCENT=$(( OBJ_SCORE_VAL * 100 / OBJ_TOTAL_VAL ))
         GRAND_TOTAL_POSSIBLE=$(( GRAND_TOTAL_POSSIBLE + OBJ_TOTAL_VAL ))
     fi
-    printf " \t%-45s : %s%%\n" "$OBJ_NAME" "$PERCENT" | tee -a ${REPORT_FILE}
+    # Only display objectives that had tasks assigned
+    if [[ $OBJ_TOTAL_VAL -gt 0 ]]; then
+        printf " \t%-45s : %s%%\n" "$OBJ_NAME" "$PERCENT" | tee -a ${REPORT_FILE}
+    fi
 done
 echo -e "\n------------------------------------------------" | tee -a ${REPORT_FILE}
 
