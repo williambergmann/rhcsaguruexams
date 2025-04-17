@@ -1,4 +1,4 @@
-RHCSA Practice Answers - Batch 12
+RHCSA Practice Answers - Mock Test 2
 
 ---
 Task 1: Configure SSHD Password Auth
