@@ -1,4 +1,4 @@
-RHCSA Practice Answers - Batch 11
+RHCSA Practice Answers - Mock Test 1
 
 ---
 Task 1: Cron Job
