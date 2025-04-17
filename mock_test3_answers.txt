@@ -1,4 +1,4 @@
-RHCSA Practice Answers - Batch 13
+RHCSA Practice Answers - Mock Test 3
 
 ---
 Task 1: User Max, Group sysadmin, Sudo NOPASSWD, Expiry
