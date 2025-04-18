@@ -1,6 +1,6 @@
 #!/bin/bash
-# Grader script - Batch 13 (Based on Mock Test 3)
-# Version: 2024-03-10
+# Grader script - Mock Test 3
+# Version: 2025-04-17
 
 # --- Configuration ---
 REPORT_FILE="/tmp/exam-report-batch13.txt"
@@ -206,7 +206,7 @@ CURRENT_TASK=2; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: /etc/skel F
 T_SCORE=0; T_TOTAL=30
 SKEL_FILE="/etc/skel/Todo.txt"
 CRON_CMD_2='logger "Ex200 Testing"' # More precise check
-CRON_SCHED_2="\* \* \* \* \*"
+CRON_SCHED_2="* * * * *"
 CRON_USER_2="Max" # Assume user exists from Task 1
 TASK_POINTS=0
 # Check skel file
