@@ -227,7 +227,7 @@ echo -e "\n" | tee -a ${REPORT_FILE}
 CURRENT_TASK=1; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Cron Job (Hello_World)${COLOR_RESET}" | tee -a ${REPORT_FILE}
 T_SCORE=0; T_TOTAL=30
 CRON_CMD_1='echo "Hello_World" >> /var/log/messages' # Corrected path
-CRON_SCHED_1="0 12 \* \* 1-5"
+CRON_SCHED_1="0 12 * * 1-5"
 CRON_USER="root"
 check_command_output "crontab -l -u $CRON_USER 2>/dev/null || cat /etc/cron.d/* /etc/crontab 2>/dev/null" "$CRON_SCHED_1 .*$CRON_USER.* $CRON_CMD_1"
 if [[ $? -eq 0 ]]; then T_SCORE=30; else echo -e "${COLOR_FAIL}[FAIL]${COLOR_RESET}\t Cron entry not found correctly."; fi
