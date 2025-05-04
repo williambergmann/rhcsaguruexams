@@ -243,7 +243,6 @@ CURRENT_TASK=4; echo -e "${COLOR_INFO}Evaluating Task $CURRENT_TASK: Grep 'error
 T_SCORE=0; T_TOTAL=30
 SOURCE_LOG="/var/log/messages"
 TARGET_LOG="/tmp/errors.log"
-rm -f $TARGET_LOG # Clean previous
 # Create dummy error in source for test
 echo "$(date) Host kernel: This is a test error line" >> "$SOURCE_LOG"
 # Check target file exists
