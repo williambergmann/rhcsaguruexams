@@ -6,7 +6,7 @@ Task 2 - Set up an NTP server to synchronize its clock with the server at
 
 Task 3 - With root access on a RHEL 9 system, create the user Micky and
 assign password 'rhel@123'. Then, construct a script named rhcsa that shows
-Welcome to user Micky when anyone lo in as Micky.
+Welcome to user Micky when anyone logs in as Micky.
 
 Task 4 - Extract all rows containing the word 'error' from the
 /var/log/messages file and save them to a file named 'errors.log' in the /tmp
