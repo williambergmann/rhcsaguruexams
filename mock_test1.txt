@@ -35,5 +35,5 @@ Task 9 - Create a directory named 'example' in the /home directory. Change
 the ownership of the directory to the 'expert' user.
 
 Task 10 - Confiure the Apache HTTP Server to host a simple website
-displayin the messae 'Hello World!'. Ensure that the service is running on
+displaying the message 'Hello World!'. Ensure that the service is running on
 port 82
